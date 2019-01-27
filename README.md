@@ -1,2 +1,2 @@
 # blog-stuarting
-code sharing for blog smartstuartkim.wordpress.com
+code sharing for blog <smartstuartkim.wordpress.com>
