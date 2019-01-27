@@ -1,10 +1,9 @@
 import numpy as np
 class Perceptron():
     # 역치와 학습률 지정
-    def __init__(self, thresholds=0.0, eta=0.01, n_iter=10):
+    def __init__(self, thresholds=0.0, eta=0.01):
         self.thresholds=thresholds
         self.eta = eta
-        self.n_iter=n_iter
         
     # 출력값과 목표값이 달랐을 때 가중치 업데이트하는 함수    
     def fit(self, X, y):
