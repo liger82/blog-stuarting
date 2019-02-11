@@ -1,0 +1,174 @@
+## MNIST data 사용
+# normalization 넣고
+# weight 초기화도 잘하고
+# 역전파도 넣고
+
+import tensorflow as tf
+import numpy as np
+import random
+import matplotlib.pyplot as plt
+
+tf.set_random_seed(777)  # for reproducibility
+
+# normalization
+def normalize(x):
+    return (x / 255.0) * 0.99 + 0.01
+
+mnist2 = tf.keras.datasets.mnist
+(X_train, y_train), (X_test, y_test) = mnist2.load_data()
+
+# normalize x input
+X_train = normalize(X_train.reshape(60000, 784))
+# X_train = X_train.reshape(60000, 784) # normalization 안한 버전
+X_train_num = 60000
+X_test = normalize(X_test.reshape(10000, 784))
+# X_test = X_test.reshape(10000, 784) # normalization 안한 버전
+X_test_num = 10000
+
+nb_classes = 10  # mnist data가 0~9의 숫자 10개라서
+n_inputs = 784 # 28*28 픽셀로 하나의 숫자 표현
+
+# y를 one_hot vector로 변경하기
+y_train = np.eye(nb_classes)[y_train.reshape(-1)]
+y_test = np.eye(nb_classes)[y_test.reshape(-1)]
+
+X = tf.placeholder(tf.float32, [None, n_inputs])
+Y = tf.placeholder(tf.float32, [None, nb_classes])
+
+# Xavier/he 초기화 방법으로 weight 초기화
+# input layer에서 hidden layer로 갈 때 곱해주는 weight
+W1 = tf.Variable(tf.random_normal([n_inputs, 100])/tf.sqrt(n_inputs/2), name='weight1')
+# 초기화를 그냥 랜덤하게 주는 방법
+# W1 = tf.Variable(tf.random_normal([n_inputs, 100]), name='weight1')
+b1 = tf.Variable(tf.random_normal([100]), name='bias1')
+layer1 = tf.sigmoid(tf.matmul(X, W1) + b1)
+
+# hidden layer에서 output layer로 갈 때 곱해주는 weight
+W2 = tf.Variable(tf.random_normal([100, nb_classes])/tf.sqrt(100/2), name='weight2')
+# 초기화를 그냥 랜덤하게 주는 방법
+# W2 = tf.Variable(tf.random_normal([100, nb_classes]), name='weight2')
+b2 = tf.Variable(tf.random_normal([nb_classes]), name='bias2')
+
+Y_pred = tf.sigmoid(tf.matmul(layer1, W2) + b2)
+
+# cross entropy
+cost = tf.reduce_mean(-tf.reduce_sum(Y * tf.log(Y_pred), axis=1))
+
+# =====역전파 backpropagation
+# 역전파 설명은 블로그를 봐주세요!
+# https://smartstuartkim.wordpress.com/2019/02/09/history-of-neural-network-3-backpropagation/
+# loss 미분derivative
+d_Y_pred = (Y_pred - Y)/ (Y_pred * (1. - Y_pred) + 1e-7)
+
+# 마지막 레이어부터 거꾸로
+d_sigmo2 = Y_pred * (1-Y_pred)
+d_a2 = d_Y_pred * d_sigmo2
+d_b2 = d_a2
+d_p2 = d_a2 # 참고) p2 = a2 * w2, o가 0이랑 헷갈릴까봐 p로 바꿈
+# dE/dw2 = A1.T * dE/dp2
+d_w2 = tf.matmul(tf.transpose(layer1), d_p2)
+
+# mean
+d_b2_mean = tf.reduce_mean(d_b2, axis=[0])
+d_W2_mean = d_w2 / tf.cast(tf.shape(layer1)[0], dtype=tf.float32)
+
+# layer1
+# 내용은 위와 동일
+d_l1 = tf.matmul(d_p2, tf.transpose(W2))
+d_sigmo1 = layer1*(1-layer1)
+d_a1 = d_l1 * d_sigmo1
+d_b1 = d_a1
+d_p1 = d_a1
+d_W1 = tf.matmul(tf.transpose(X), d_a1)
+
+# mean
+d_W1_mean = d_W1 / tf.cast(tf.shape(X)[0], dtype=tf.float32)
+d_b1_mean = tf.reduce_mean(d_b1, axis=[0])
+
+# learning rate
+learning_rate = 0.1
+
+# parameters update
+step = [
+    tf.assign(W2, W2 - learning_rate * d_W2_mean),
+    tf.assign(b2, b2 - learning_rate * d_b2_mean),
+    tf.assign(W1, W1 - learning_rate * d_W1_mean),
+    tf.assign(b1, b1 - learning_rate * d_b1_mean)
+]
+
+## accuracy
+# one_hot vector에서 1인 것의 인덱스를 뽑아오는 방식으로 십진법으로 바꾼다.
+# 그 후 같은지 아닌지 판단 : 같으면 1, 아니면 0
+is_correct = tf.equal(tf.argmax(Y_pred, 1), tf.argmax(Y, 1))
+# Calculate accuracy ; 평균값
+accuracy = tf.reduce_mean(tf.cast(is_correct, tf.float32))
+
+# 조건
+num_epochs = 15 # 전체 데이터를 15번 훈련
+batch_size = 100 # 데이터를 batch size만큼 잘라서 훈련
+num_iterations = int(X_train_num / batch_size) # 1 epoch마다 몇번 돌건지
+
+with tf.Session() as sess:
+    sess.run(tf.global_variables_initializer())
+    for epoch in range(num_epochs):
+        avg_cost = 0
+
+        for i in range(num_iterations):
+
+            batch_xs = X_train[i*batch_size:(i+1)*batch_size]
+            batch_ys = y_train[i*batch_size:(i+1)*batch_size]
+
+            _, cost_val = sess.run([step, cost], feed_dict={X: batch_xs, Y: batch_ys})
+            avg_cost += cost_val / num_iterations
+        print("Epoch: {:04d}, Cost: {:.9f}".format(epoch + 1, avg_cost))
+    print("=== Training finished ===")
+
+    # Accuracy report
+    c, a = sess.run([is_correct, accuracy], feed_dict={X: X_test, Y: y_test})
+    # print("correct: ", c)
+    print("정확도 accuracy : ", a)
+
+    # 랜덤하게 하나 골라서 테스트 해보기
+    r = random.randint(0, X_test_num - 1)
+    print("정답 Label : ", np.argmax(y_test[r:r+1], 1))
+    print("예측 Prediction : ", sess.run(tf.argmax(Y_pred, 1),
+                                       feed_dict={X: X_test[r:r + 1]}))
+    # image로 확인해보기
+    plt.imshow(X_test[r:r + 1].reshape(28, 28),
+               cmap="Greys",
+               interpolation="nearest",
+               )
+    plt.show()
+
+'''
+
+[결과 - 초기화 stupid way] 
+Epoch: 0015, Cost: 0.507471454
+=== Training finished ===
+correct:  [ True  True  True ... False  True  True]
+accuracy:  0.882
+정답 Label :  [3]
+예측 Prediction :  [3]
+
+[결과 - 초기화 smart way] 
+Epoch: 0001, Cost: 1.041206463
+Epoch: 0002, Cost: 0.537950249
+Epoch: 0003, Cost: 0.446384590
+Epoch: 0004, Cost: 0.401788843
+Epoch: 0005, Cost: 0.371547463
+Epoch: 0006, Cost: 0.347805660
+Epoch: 0007, Cost: 0.327874861
+Epoch: 0008, Cost: 0.310583981
+Epoch: 0009, Cost: 0.295316542
+Epoch: 0010, Cost: 0.281695272
+Epoch: 0011, Cost: 0.269456507
+Epoch: 0012, Cost: 0.258397034
+Epoch: 0013, Cost: 0.248351452
+Epoch: 0014, Cost: 0.239181497
+Epoch: 0015, Cost: 0.230770238
+=== Training finished ===
+correct:  [ True  True  True ...  True  True  True]
+accuracy:  0.9467
+정답 Label :  [6]
+예측 Prediction :  [6]
+'''
